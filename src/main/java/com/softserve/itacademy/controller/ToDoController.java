@@ -5,7 +5,6 @@ import com.softserve.itacademy.dto.todoDto.ToDoDtoConverter;
 import com.softserve.itacademy.dto.todoDto.UpdateToDoDto;
 import com.softserve.itacademy.model.ToDo;
 import com.softserve.itacademy.service.ToDoService;
-import com.softserve.itacademy.model.Task;
 import com.softserve.itacademy.model.User;
 import com.softserve.itacademy.service.TaskService;
 import com.softserve.itacademy.service.UserService;
@@ -34,74 +33,58 @@ public class ToDoController {
     private final ToDoDtoConverter todoDtoConverter;
 
     @GetMapping("/create/users/{owner_id}")
-    public String createToDoForm(@PathVariable("owner_id") Long ownerId, Model model) {
-        CreateToDoDto todoDto = new CreateToDoDto();
-        todoDto.setOwnerId(ownerId);
-        model.addAttribute("todo", todoDto);
+    public String create(@PathVariable("owner_id") Long ownerId, Model model) {
+        model.addAttribute("todo", new CreateToDoDto());
         model.addAttribute("ownerId", ownerId);
         return "create-todo";
     }
 
     @PostMapping("/create/users/{owner_id}")
-    public String createToDo(@PathVariable("owner_id") Long ownerId,
-                            @Validated @ModelAttribute("todo") CreateToDoDto todoDto,
-                            BindingResult result,
-                            Model model) {
+    public String create(@PathVariable("owner_id") Long ownerId,
+                         @Validated @ModelAttribute("todo") CreateToDoDto todoDto,
+                         BindingResult result) {
         if (result.hasErrors()) {
-            model.addAttribute("ownerId", ownerId);
             return "create-todo";
         }
         User owner = userService.readById(ownerId);
         ToDo todo = todoDtoConverter.toEntity(todoDto, owner);
-        try {
-            todoService.create(todo);
-        } catch (IllegalArgumentException e) {
-            result.rejectValue("title", "error.todo", e.getMessage());
-            model.addAttribute("ownerId", ownerId);
-            return "create-todo";
-        }
+        todo.setCreatedAt(LocalDateTime.now());
+        todoService.create(todo);
         return "redirect:/todos/all/users/" + ownerId;
     }
 
-    @GetMapping("/{todo_id}/update/users/{owner_id}")
-    public String updateToDoForm(@PathVariable("todo_id") Long todoId,
-                                 @PathVariable("owner_id") Long ownerId,
-                                 Model model) {
-        ToDo todo = todoService.readById(todoId);
-        UpdateToDoDto todoDto = UpdateToDoDto.builder()
+    @GetMapping("/{id}/update/users/{owner_id}")
+    public String update(@PathVariable("id") Long id,
+                         @PathVariable("owner_id") Long ownerId, Model model) {
+        ToDo todo = todoService.readById(id);
+        UpdateToDoDto updateToDoDto = UpdateToDoDto.builder()
                 .id(todo.getId())
                 .title(todo.getTitle())
                 .ownerId(todo.getOwner().getId())
                 .build();
-        model.addAttribute("todo", todoDto);
+        model.addAttribute("todo", updateToDoDto);
         return "update-todo";
     }
 
-    @PostMapping("/{todo_id}/update/users/{owner_id}")
-    public String updateToDo(@PathVariable("todo_id") Long todoId,
-                            @PathVariable("owner_id") Long ownerId,
-                            @Validated @ModelAttribute("todo") UpdateToDoDto todoDto,
-                            BindingResult result,
-                            Model model) {
+    @PostMapping("/{id}/update/users/{owner_id}")
+    public String update(@PathVariable("id") Long id,
+                         @PathVariable("owner_id") Long ownerId,
+                         @Validated @ModelAttribute("todo") UpdateToDoDto todoDto,
+                         BindingResult result) {
         if (result.hasErrors()) {
             return "update-todo";
         }
-        ToDo todo = todoService.readById(todoId);
+        ToDo todo = todoService.readById(id);
         User owner = userService.readById(ownerId);
         todoDtoConverter.fillFields(todo, todoDto, owner);
-        try {
-            todoService.update(todo);
-        } catch (IllegalArgumentException e) {
-            result.rejectValue("title", "error.todo", e.getMessage());
-            return "update-todo";
-        }
+        todoService.update(todo);
         return "redirect:/todos/all/users/" + ownerId;
     }
 
-    @GetMapping("/{todo_id}/delete/users/{owner_id}")
-    public String delete(@PathVariable("todo_id") Long todoId,
-                        @PathVariable("owner_id") Long ownerId) {
-        todoService.delete(todoId);
+    @GetMapping("/{id}/delete/users/{owner_id}")
+    public String delete(@PathVariable("id") Long id,
+                         @PathVariable("owner_id") Long ownerId) {
+        todoService.delete(id);
         return "redirect:/todos/all/users/" + ownerId;
     }
 
@@ -126,14 +109,14 @@ public class ToDoController {
 
     @GetMapping("/{id}/add")
     public String addCollaborator(@PathVariable("id") Long todoId,
-                                 @RequestParam("user_id") Long userId) {
+                                  @RequestParam("user_id") Long userId) {
         todoService.addCollaborator(todoId, userId);
         return "redirect:/todos/" + todoId + "/tasks";
     }
 
     @GetMapping("/{id}/remove")
     public String removeCollaborator(@PathVariable("id") Long todoId,
-                                    @RequestParam("user_id") Long userId) {
+                                     @RequestParam("user_id") Long userId) {
         todoService.removeCollaborator(todoId, userId);
         return "redirect:/todos/" + todoId + "/tasks";
     }

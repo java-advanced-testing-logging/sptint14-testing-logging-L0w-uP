@@ -10,6 +10,7 @@ import com.softserve.itacademy.model.UserRole;
 import com.softserve.itacademy.repository.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,13 +19,14 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class UserService {
-
     private final UserRepository userRepository;
     private final UserDtoConverter userDtoConverter;
 
     @Transactional
     public User register(CreateUserDto createUserDto) {
+        log.info("Registering new user with email: {}", createUserDto.getEmail());
         createUserDto.setRole(UserRole.USER);
         User user = userDtoConverter.convertToUser(createUserDto);
         user.setPassword("{noop}" + user.getPassword());
@@ -35,11 +37,29 @@ public class UserService {
     public User create(User user) {
         if (user != null) {
             if (userRepository.findByEmail(user.getEmail()).isPresent()) {
+                log.warn("Registration failed: Email {} already exists", user.getEmail());
                 throw new IllegalArgumentException("User with email '" + user.getEmail() + "' already exists");
             }
-            return userRepository.save(user);
+            User savedUser = userRepository.save(user);
+            log.debug("User created successfully with ID: {}", savedUser.getId());
+            return savedUser;
         }
+        log.error("Attempted to create a null user reference");
         throw new NullEntityReferenceException("User cannot be 'null'");
+    }
+
+    @Transactional
+    public UserDto update(UpdateUserDto updateUserDto) {
+        log.info("Updating user ID: {}", updateUserDto.getId());
+        User user = userRepository.findById(updateUserDto.getId())
+                .orElseThrow(() -> {
+                    log.error("Update failed: User with ID {} not found", updateUserDto.getId());
+                    return new EntityNotFoundException("User not found");
+                });
+        userDtoConverter.fillFields(user, updateUserDto);
+        userRepository.save(user);
+        log.debug("User ID: {} successfully updated", user.getId());
+        return userDtoConverter.toDto(user);
     }
 
     @Transactional(readOnly = true)
@@ -49,25 +69,11 @@ public class UserService {
     }
 
     @Transactional
-    public UserDto update(UpdateUserDto updateUserDto) {
-        User user = userRepository.findById(updateUserDto.getId()).orElseThrow(
-                () -> new EntityNotFoundException("User with id " + updateUserDto.getId() + " not found"));
-        if (updateUserDto.getRole() != null && user.getRole() == UserRole.ADMIN) {
-            user.setRole(updateUserDto.getRole());
-            updateUserDto.setRole(null); // prevent double setting in converter if we want to be strict, 
-                                         // but fillFields already has a null check now.
-        } else {
-            updateUserDto.setRole(null); // don't allow non-admin to change role, or admin to change to null
-        }
-        userDtoConverter.fillFields(user, updateUserDto);
-        userRepository.save(user);
-        return userDtoConverter.toDto(user);
-    }
-
-    @Transactional
     public void delete(long id) {
+        log.info("Deleting user ID: {}", id);
         User user = readById(id);
         userRepository.delete(user);
+        log.debug("User ID: {} deleted", id);
     }
 
     @Transactional(readOnly = true)
